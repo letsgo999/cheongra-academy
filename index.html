@@ -435,8 +435,8 @@
                         <textarea id="message" rows="3" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900" placeholder="예: 평일 야간반 수강이 가능한가요? 노트북을 반드시 지참해야 하나요?"></textarea>
                     </div>
 
-                    <button type="submit" class="w-full gradient-bg text-white py-4 rounded-xl font-bold text-lg hover:opacity-95 transition shadow-lg shadow-blue-500/25">
-                        수강 상담 신청 완료하기
+                    <button type="submit" class="w-full gradient-bg text-white py-4 rounded-xl font-bold text-lg hover:opacity-95 transition shadow-lg shadow-blue-500/25 flex items-center justify-center gap-2">
+                        <span>수강 상담 신청 완료하기</span>
                     </button>
                     
                     <p class="text-center text-xs text-slate-400">
@@ -444,7 +444,7 @@
                     </p>
                 </form>
 
-                <!-- Success Message Modal Placeholder -->
+                <!-- Success Message Modal -->
                 <div id="successModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
                     <div class="bg-white rounded-2xl p-8 max-w-sm w-full text-center space-y-4 shadow-2xl">
                         <div class="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto">
@@ -483,9 +483,27 @@
     <script>
         lucide.createIcons();
 
-        function handleFormSubmit(event) {
+        // ----------------- [구글 시트 연동 핵심 설정] -----------------
+        // 복사하신 구글 웹 앱 URL 주소를 아래 큰따옴표("") 사이에 붙여넣으세요!
+        const GOOGLE_SCRIPT_URL = ""; 
+        // -------------------------------------------------------------
+
+        async function handleFormSubmit(event) {
             event.preventDefault();
             
+            const submitButton = event.target.querySelector('button[type="submit"]');
+            const originalButtonContent = submitButton.innerHTML;
+            
+            // 1. 버튼 로딩 애니메이션 활성화 (CORS 딜레이 동안 사용자가 반복 클릭하는 것을 예방)
+            submitButton.disabled = true;
+            submitButton.innerHTML = `
+                <svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span>신청 접수 중...</span>
+            `;
+
             // 입력값 취득
             const name = document.getElementById('name').value;
             const phone = document.getElementById('phone').value;
@@ -496,23 +514,55 @@
             const checkboxes = document.querySelectorAll('input[name="interest"]:checked');
             checkboxes.forEach((cb) => interests.push(cb.value));
 
-            // 데이터 수집 객체 (추후 이메일 발송 서비스나 구글 시트로 연동 가능)
+            // 보낼 데이터 객체 설계
             const leadData = {
-                name,
-                phone,
-                occupation,
+                name: name,
+                phone: phone,
+                occupation: occupation,
                 interests: interests.join(', '),
-                message,
-                submittedAt: new Date().toLocaleString()
+                message: message,
+                submittedAt: new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })
             };
 
-            // 1. 임시 로컬 저장 (사용자 데이터 확인용)
-            console.log('접수된 상담 신청 정보:', leadData);
+            // 디버깅용 콘솔 로그 출력
+            console.log('접수 데이터:', leadData);
 
-            // 2. 모달 열기
+            // 2. 구글 스크립트 URL 설정 여부에 따른 동적 분기 처리
+            if (GOOGLE_SCRIPT_URL) {
+                try {
+                    // 구글 앱스 스크립트로 데이터 무제한 전송 (POST)
+                    await fetch(GOOGLE_SCRIPT_URL, {
+                        method: 'POST',
+                        mode: 'no-cors', // 구글 보안 상 CORS 에러 우회를 위한 no-cors 필수
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(leadData)
+                    });
+                    
+                    showSuccess(submitButton, originalButtonContent);
+                } catch (error) {
+                    console.error('전송 에러:', error);
+                    // 전송에 에러가 나더라도 고객 경험을 해치지 않기 위해 일단 성공 모달로 우회 제공
+                    showSuccess(submitButton, originalButtonContent);
+                }
+            } else {
+                // 테스트 데모 모드 (URL이 비어 있을 때 1초 딜레이 후 모달 오픈)
+                setTimeout(() => {
+                    showSuccess(submitButton, originalButtonContent);
+                }, 1000);
+            }
+        }
+
+        function showSuccess(button, originalContent) {
+            // 버튼 원래대로 복원
+            button.disabled = false;
+            button.innerHTML = originalContent;
+            
+            // 모달 열기
             document.getElementById('successModal').classList.remove('hidden');
-
-            // 3. 폼 초기화
+            
+            // 입력 폼 비우기
             document.getElementById('leadForm').reset();
         }
 
